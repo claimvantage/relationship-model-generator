@@ -10,7 +10,7 @@ Use this unchanged or clone and make your own changes. We are not looking for co
 
 ## Screenshot
 
-[ScreenShot.png]
+![Screenshot](ScreenShot.png)
 
 ## Sample code output
 
