@@ -1,0 +1,40 @@
+<apex:page controller="RelationshipModelGeneratorController">
+
+    <apex:sectionHeader title="Relationship Model Generator" subtitle="Generates wrapper classes that model parent/child relationships found via describe calls"/>
+
+    <apex:pageMessages />
+
+    <apex:form >
+        <apex:pageBlock mode="edit">
+        
+            <apex:pageBlockButtons location="top">
+                <apex:commandButton value="Generate" action="{!generate}" styleClass="slds-button slds-button--brand"/>
+            </apex:pageBlockButtons>
+            
+            <apex:pageBlockSection title="Options" columns="2">
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="Outer Class Name"/>
+                    <apex:inputText value="{!outerClassName}"/>
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="Namespace Prefix to Strip"/>
+                    <apex:inputText value="{!namespacePrefixToStrip}" />
+                </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="SObject Types"/>
+                    <apex:inputTextarea value="{!types}" rows="10" style="width: 30em"/>
+                </apex:pageBlockSectionItem>
+            </apex:pageBlockSection>
+
+            <apex:pageBlockSection title="Generated Code" columns="1">
+                <apex:inputTextarea value="{!code}" rows="10" style="width: 100%; font-family: courier new, monospace; font-size: 9pt;"/>
+            </apex:pageBlockSection>
+
+            <apex:pageBlockSection title="Generated Test" columns="1">
+                <apex:inputTextarea value="{!test}" rows="10" style="width: 100%; font-family: courier new, monospace; font-size: 9pt;"/>
+            </apex:pageBlockSection>
+            
+        </apex:pageBlock>
+    </apex:form>
+    
+</apex:page>
