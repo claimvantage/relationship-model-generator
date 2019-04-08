@@ -19,6 +19,20 @@ public with sharing class RelationshipModelGeneratorController {
         'Account'
     };
 
+    private static final String[] DEFAULT_EXCLUSIONS = new String[] {
+        'cve__Claim__c.cve__PrecedingClaim__c',
+        'cve__BenefitClaimed__c.cve__ClaimantInsuredAccount__c',
+        'cve__BenefitClaimed__c.cve__ClaimantInsured__c',
+        'cve__Benefit__c.cve__BaseBenefit__c',
+        'cve__Coverage__c.cve__PercentageOf__c',
+        'cve__Journal__c.cve__Claim__c',
+        'cve__Journal__c.cve__ClaimantInsuredAccount__c',
+        'cve__PaymentSpecification__c.cve__Claim__c',
+        'cve__PaymentSpecification__c.cve__ClaimantInsuredAccount__c',
+        'cve__ClaimRelationship__c.cve__AccountWithAccountLabel__c',
+        'cve__ClaimRelationship__c.cve__ContactWithContactLabel__c'
+    };
+
     // Per SObject
     private class Type {
 
@@ -154,11 +168,45 @@ public with sharing class RelationshipModelGeneratorController {
                     if (t != null) {
                         sobTypes.add(t);
                     } else {
-                        ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, 'Did not recognise SObjectType ' + type + ' so no code generated for that'));
+                        addError('Did not recognise SObjectType ' + type + ' so no code generated for that');
                     }
                 }
             }
             return sobTypes;
+        }
+        set;
+    }
+
+    private transient Set<SObjectField> excludedFields {
+        get {
+            if (excludedFields == null) {
+                excludedFields = new Set<SObjectField>();
+
+                Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
+                for (String exclusion : exclusions.split('\n')) {
+                    exclusion = exclusion.trim();
+                    String[] parts = exclusion.split('\\.');
+                    if (parts.size() == 2) {
+                        String type = parts[0];
+                        String field = parts[1];
+                        SObjectType t = gd.get(type);
+                        if (t != null) {
+                            Map<String, SObjectField> m = t.getDescribe().fields.getMap();
+                            SObjectField f = m.get(field);
+                            if (f != null) {
+                                excludedFields.add(f);
+                            } else {
+                                addError('Did not recognise SObjectField ' + field + ' so exclusion ' + exclusion + ' ignored');
+                            }
+                        } else {
+                            addError('Did not recognise SObjectType ' + type + ' so exclusion ' + exclusion + ' ignored');
+                        }
+                    } else {
+                        addError('Could not parse exclusion ' + exclusion + ' so ignored');
+                    }
+                }
+            }
+            return excludedFields;
         }
         set;
     }
@@ -181,7 +229,7 @@ public with sharing class RelationshipModelGeneratorController {
 
                     for (ChildRelationship c : sobType.getDescribe().getChildRelationships()) {
                         SObjectType ct = c.getChildSObject();
-                        if (sobTypes.contains(ct) && c.getRelationshipName() != null) {
+                        if (sobTypes.contains(ct) && c.getRelationshipName() != null && !excludedFields.contains(c.getField())) {
                             Relationship r = new Relationship(this, sobType, ct, c.getField(), c.getRelationshipName());
                             t.children.add(r);
                             fieldInfo.put(c.getField(), r);
@@ -194,16 +242,18 @@ public with sharing class RelationshipModelGeneratorController {
                     Type t = typeInfo.get(sobType);
 
                     for(SObjectField f : sobType.getDescribe().fields.getMap().values()) {
-                        DescribeFieldResult dfr = f.getDescribe();
-                        if (dfr.getType() == DisplayType.REFERENCE) {
-                            for (SObjectType pt : dfr.getReferenceTo()) {
-                                if (sobTypes.contains(pt)) {
-                                    // Instance shared
-                                    Relationship r = fieldInfo.get(f);
-                                    if (r != null) {
-                                        t.parents.add(r);
-                                        // Fill in last bit of info
-                                        r.parentRelationshipField = f;
+                        if (!excludedFields.contains(f)) {
+                            DescribeFieldResult dfr = f.getDescribe();
+                            if (dfr.getType() == DisplayType.REFERENCE) {
+                                for (SObjectType pt : dfr.getReferenceTo()) {
+                                    if (sobTypes.contains(pt)) {
+                                        // Instance shared
+                                        Relationship r = fieldInfo.get(f);
+                                        if (r != null) {
+                                            t.parents.add(r);
+                                            // Fill in last bit of info
+                                            r.parentRelationshipField = f;
+                                        }
                                     }
                                 }
                             }
@@ -250,18 +300,25 @@ public with sharing class RelationshipModelGeneratorController {
         set;
     }
 
+    public Integer codeLines {get; private set;}
+    public Integer testLines {get; private set;}
+
     // UI form fields
-    public String types {get; set;}
     public String outerClassName {get; set;}
     public String namespacePrefixToStrip {get; set;}
+    public String types {get; set;}
+    public String exclusions {get; set;}
     public String code {get; set;}
     public String test {get; set;}
 
     public RelationshipModelGeneratorController() {
 
         types = String.join(DEFAULT_TYPES, '\n');
+        exclusions = String.join(DEFAULT_EXCLUSIONS, '\n');
         outerClassName = 'EligibilityModel';
         namespacePrefixToStrip = 'cve__';
+        codeLines = 0;
+        testLines = 0;
     }
 
     public PageReference generate() {
@@ -269,10 +326,12 @@ public with sharing class RelationshipModelGeneratorController {
         lines.clear();
         outerClass();
         code = String.join(lines, '\n');
+        codeLines = lines.size();
 
         lines.clear();
         testClass();
         test = String.join(lines, '\n');
+        testLines = lines.size();
 
         return null;
     }
@@ -294,7 +353,7 @@ public with sharing class RelationshipModelGeneratorController {
     private void outerClass() {
 
         add('/*');
-        add(' * Generated by the RelationshipModelGenerator page - do not edit directly.');
+        add(' * Generated by the ModelGenerator page - do not edit directly.');
         add(' * ');
         add(' * Simple type-safe SObject wrapper classes that hold the parent/child relationships');
         add(' * to use in place of the __r properties (unusable in general as the collections are immutable).');
@@ -460,7 +519,7 @@ public with sharing class RelationshipModelGeneratorController {
     private void testClass() {
 
         add('/*');
-        add(' * Generated by the RelationshipModelGenerator page - do not edit directly.');
+        add(' * Generated by the ModelGenerator page - do not edit directly.');
         add(' * ');
         add(' * Cover the generated code.');
         add(' */');
@@ -512,5 +571,10 @@ public with sharing class RelationshipModelGeneratorController {
     private String q(String name) {
 
         return outerClassName + '.' + name;
+    }
+
+    private static void addError(String message) {
+
+        ApexPages.addMessage(new ApexPages.Message(ApexPages.Severity.ERROR, message));
     }
 }
