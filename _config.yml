@@ -1,1 +1,2 @@
 theme: jekyll-theme-architect
+description: Apex code generation tool that outputs SObject wrapper classes that maintain parent/child relationships
