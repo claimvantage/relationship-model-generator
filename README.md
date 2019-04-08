@@ -4,7 +4,7 @@
 
 When SObjects are queried in a single query, their parent-child `__r` fields are populated and can be used to navigate from one object to the other. But SOQL doesn't allow a deep tree of objects to be queried in one go, and the collection `__r` fields are immutable.
 
-This Visualforce page code generator produces an inner class per SObject that wraps the SObject and adds fields to model the parent and child relationships. Convenience methods are also added to create the wrappers for parent and child objects.
+This Visualforce page code generator produces an inner class per SObject that wraps the SObject and adds fields to model the parent and child relationships. Convenience methods are also included to create the wrappers for parent and child objects and set the relationship fields.
 
 A test class is also generated, primarily to ensure the generated code has test coverage.
 
