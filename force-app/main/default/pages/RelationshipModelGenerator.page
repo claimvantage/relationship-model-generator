@@ -24,13 +24,17 @@
                     <apex:outputLabel value="SObject Types"/>
                     <apex:inputTextarea value="{!types}" rows="10" style="width: 30em"/>
                 </apex:pageBlockSectionItem>
+                <apex:pageBlockSectionItem >
+                    <apex:outputLabel value="Relationship Fields to Exclude"/>
+                    <apex:inputTextarea value="{!exclusions}" rows="10" style="width: 30em"/>
+                </apex:pageBlockSectionItem>
             </apex:pageBlockSection>
 
-            <apex:pageBlockSection title="Generated Code" columns="1">
+            <apex:pageBlockSection title="Generated Code - {!codeLines} Lines" columns="1">
                 <apex:inputTextarea value="{!code}" rows="10" style="width: 100%; font-family: courier new, monospace; font-size: 9pt;"/>
             </apex:pageBlockSection>
 
-            <apex:pageBlockSection title="Generated Test" columns="1">
+            <apex:pageBlockSection title="Generated Test - {!testLines} Lines" columns="1">
                 <apex:inputTextarea value="{!test}" rows="10" style="width: 100%; font-family: courier new, monospace; font-size: 9pt;"/>
             </apex:pageBlockSection>
             
