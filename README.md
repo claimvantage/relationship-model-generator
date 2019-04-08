@@ -8,6 +8,8 @@ This Visualforce page code generator produces an inner class per SObject that wr
 
 A test class is also generated, primarily to ensure the generated code has test coverage.
 
+Use this unchanged or clone and make your own changes. We are not looking for contributions, but rather just sharing some code that might be useful to others.
+
 ## Sample code output
 
 ```
