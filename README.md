@@ -8,6 +8,10 @@ This Visualforce page code generator produces an inner class per SObject that wr
 
 Use this unchanged or clone and make your own changes. We are not looking for contributions, but rather just sharing some code that might be useful to others.
 
+## Screenshot
+
+[ScreenShot.png]
+
 ## Sample code output
 
 ```
