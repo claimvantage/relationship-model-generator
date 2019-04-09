@@ -21,6 +21,7 @@ public with sharing class RelationshipModelGeneratorController {
 
     private static final String[] DEFAULT_EXCLUSIONS = new String[] {
         'cve__Claim__c.cve__PrecedingClaim__c',
+        'cve__Claim__c.cve__ClaimantInsuredAccount__c',
         'cve__BenefitClaimed__c.cve__ClaimantInsuredAccount__c',
         'cve__BenefitClaimed__c.cve__ClaimantInsured__c',
         'cve__Benefit__c.cve__BaseBenefit__c',
@@ -30,7 +31,11 @@ public with sharing class RelationshipModelGeneratorController {
         'cve__PaymentSpecification__c.cve__Claim__c',
         'cve__PaymentSpecification__c.cve__ClaimantInsuredAccount__c',
         'cve__ClaimRelationship__c.cve__AccountWithAccountLabel__c',
-        'cve__ClaimRelationship__c.cve__ContactWithContactLabel__c'
+        'cve__ClaimRelationship__c.cve__ContactWithContactLabel__c',
+        'Contact.AccountId',
+        'Contact.cve__Parent__c',
+        'Contact.cve__Spouse__c',
+        'Account.ParentId'
     };
 
     // Per SObject
