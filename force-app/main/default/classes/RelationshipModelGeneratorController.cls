@@ -26,9 +26,7 @@ public with sharing class RelationshipModelGeneratorController {
         'cve__BenefitClaimed__c.cve__ClaimantInsured__c',
         'cve__Benefit__c.cve__BaseBenefit__c',
         'cve__Coverage__c.cve__PercentageOf__c',
-        'cve__Journal__c.cve__Claim__c',
         'cve__Journal__c.cve__ClaimantInsuredAccount__c',
-        'cve__PaymentSpecification__c.cve__Claim__c',
         'cve__PaymentSpecification__c.cve__ClaimantInsuredAccount__c',
         'cve__ClaimRelationship__c.cve__AccountWithAccountLabel__c',
         'cve__ClaimRelationship__c.cve__ContactWithContactLabel__c',
@@ -43,12 +41,19 @@ public with sharing class RelationshipModelGeneratorController {
 
         RelationshipModelGeneratorController controller;
         SObjectType sobType;
+        String[] recordTypeDeveloperNames = new String[] {};
         Relationship[] parents = new Relationship[] {};
         Relationship[] children = new Relationship[] {};
 
         Type(RelationshipModelGeneratorController controller, SObjectType sobType) {
             this.controller = controller;
             this.sobType = sobType;
+            for (RecordTypeInfo rti : sobType.getDescribe().getRecordTypeInfos()) {
+                if (rti.isActive() && !rti.isMaster()) {
+                    recordTypeDeveloperNames.add(rti.getDeveloperName());
+                }
+            }
+            recordTypeDeveloperNames.sort();
         }
 
         String sobType() {
@@ -65,6 +70,10 @@ public with sharing class RelationshipModelGeneratorController {
 
         String testName() {
             return className().uncapitalize();
+        }
+
+        String recordTypeEnumName() {
+            return className() + 'RecordType';
         }
 
         String toClassName(SObjectType t) {
@@ -365,6 +374,7 @@ public with sharing class RelationshipModelGeneratorController {
         add(' * Adding a parent or a child also populates the reverse relationship.');
         add(' * The SObject is exposed so its non-relationship fields can be directly accessed.');
         add(' * Wrapper objects are created through factory methods so subclasses can be substituted in the future.');
+        add(' * Enums are generated for record types.');
         add(' */');
         add('public inherited sharing class ' + outerClassName + ' {');
 
@@ -379,11 +389,53 @@ public with sharing class RelationshipModelGeneratorController {
 
         // Pereserves order from types input field
         for (SObjectType t : sobTypes) {
-            factoryMethod(typeInfo.get(t));
-            innerClass(typeInfo.get(t));
+            Type info = typeInfo.get(t);
+            typeComment(info);
+            recordTypes(info);
+            factoryMethod(info);
+            innerClass(info);
         }
 
         indent--;
+    }
+
+    private void typeComment(Type t) {
+
+        blank();
+        add('//');
+        add('// ' + t.className());
+        add('//');
+    }
+
+    private void recordTypes(Type t) {
+        
+        String[] names = t.recordTypeDeveloperNames;
+        if (names.size() == 0) return;
+
+        blank();
+        add('// Record type enum');
+        add('public enum ' + t.recordTypeEnumName() + ' {');
+
+        indent++;
+        for (Integer i = 0; i < names.size(); i++) add(names[i] + (i < names.size() - 1 ? ',' : ''));
+        indent--;
+
+        add('}');
+
+        blank();
+        add('// Record type enum lookup');
+        add('public static ' + t.recordTypeEnumName() + ' to' + t.recordTypeEnumName() + '(String developerName) {');
+
+        indent++;
+        add('for (' + t.recordTypeEnumName() + ' e : ' + t.recordTypeEnumName() + '.values()) {');
+        indent++;
+        add('if (e.name() == developerName) return e;');
+        indent--;
+        add('}');
+        add('return null;');
+        indent--;
+
+        add('}');
     }
 
     private void factoryMethod(Type t) {
@@ -418,6 +470,7 @@ public with sharing class RelationshipModelGeneratorController {
         wrappedObject(t);
         classFields(t);
         classCtor(t);
+        recordTypeMethod(t);
         classMethods(t);
         indent--;
     }
@@ -427,6 +480,7 @@ public with sharing class RelationshipModelGeneratorController {
         blank();
         add('// Wrapped object');
         add('public ' + t.sobType() + ' sob {get; private set;}');
+        if (t.recordTypeDeveloperNames.size() > 0) add('public ' + t.recordTypeEnumName() + ' recordType {get; private set;}');
     }
 
     private void classFields(Type t) {
@@ -470,6 +524,21 @@ public with sharing class RelationshipModelGeneratorController {
         add('}');
     }
 
+
+    private void recordTypeMethod(Type t) {
+
+        if (t.recordTypeDeveloperNames.size() > 0) {
+            blank();
+            add('// Set the record type starting from the developer name');
+            add('public ' + t.recordTypeEnumName() + ' setRecordType(String developerName) {');
+            indent++;
+            add('recordType = to' + t.recordTypeEnumName() + '(developerName);');
+            add('return recordType;');
+            indent--;
+            add('}');
+        }
+    }
+
     private void classMethods(Type t) {
 
         Boolean firstParent = true;
@@ -500,9 +569,9 @@ public with sharing class RelationshipModelGeneratorController {
     private void parentMethodBody(Type t, Relationship r) {
 
         indent++;
-        add(r.parentClassName() + ' w = ' + r.parentFactoryMethodName() + '(sob);');      
+        add(r.parentClassName() + ' w = sob != null ? ' + r.parentFactoryMethodName() + '(sob) : null;');      
         add(r.parentRelationshipName() + ' = w;');
-        add('w.' + r.childRelationshipName() + '.add(this);');
+        add('if (w != null) w.' + r.childRelationshipName() + '.add(this);');
         add('return w;');
         indent--;
     }
@@ -510,6 +579,7 @@ public with sharing class RelationshipModelGeneratorController {
     private void childMethodBody(Type t, Relationship r) {
 
         indent++;
+        add('if (sob == null) return null;');
         add(r.childClassName() + ' w = ' + r.childFactoryMethodName() + '(sob);');
         add(r.childRelationshipName() + '.add(w);');
         add('w.' + r.parentRelationshipName() + ' = this;');
@@ -570,6 +640,15 @@ public with sharing class RelationshipModelGeneratorController {
         }
         for(Relationship c : t.children) {
             add('System.assertNotEquals(null, w.' + c.childMethodName() + '(new ' + c.childSobType() + '()));');
+        }
+
+        if (t.recordTypeDeveloperNames.size() > 0) {
+            String first = t.recordTypeDeveloperNames[0];
+            String last = t.recordTypeDeveloperNames[t.recordTypeDeveloperNames.size() - 1];
+            // Wrapper method
+            add('System.assertEquals(' + q(t.recordTypeEnumName()) + '.' + first + ', w.setRecordType(\'' + first + '\'));');
+            // Static method
+            add('System.assertEquals(' + q(t.recordTypeEnumName()) + '.' + last + ', ' + q(t.className()) + '.to' + t.recordTypeEnumName() + '(\'' + last + '\'));');
         }
     }
 
