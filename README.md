@@ -46,6 +46,9 @@ public inherited sharing class EligibilityModel {
         // Wrapped object
         public Claim__c sob {get; private set;}
 
+        // Any name
+        public String recordTypeDeveloperName {get; private set;}
+
         // Parent wrapper object relationships
         public ContactWrapper claimantInsured {get; private set;}
         public Policy policy {get; private set;}
@@ -82,6 +85,12 @@ public inherited sharing class EligibilityModel {
 
         // Create via factory method only
         private Claim() {
+        }
+
+        // Any name
+        public String setRecordTypeDeveloperName(String name) {
+            recordTypeDeveloperName = name;
+            return recordTypeDeveloperName;
         }
 
         // Parent object methods
@@ -175,7 +184,11 @@ public inherited sharing class EligibilityModel {
 
         // Wrapped object
         public BenefitClaimed__c sob {get; private set;}
+
+        // Record types known at code generation time
         public BenefitClaimedRecordType recordType {get; private set;}
+        // Any name
+        public String recordTypeDeveloperName {get; private set;}
 
         // Parent wrapper object relationships
         public Claim claim {get; private set;}
@@ -213,6 +226,9 @@ public inherited sharing class EligibilityModel {
 
         // Set the record type starting from the developer name
         public BenefitClaimedRecordType setRecordType(String developerName) {
+            // Any name
+            recordTypeDeveloperName = developerName;
+            // Enum can be null if record type added after code generation
             recordType = toBenefitClaimedRecordType(developerName);
             return recordType;
         }
@@ -287,6 +303,7 @@ private class EligibilityModelTest {
 
     @IsTest
     static void claim() {
+
         EligibilityModel.Claim w = EligibilityModel.newClaim(new Claim__c());
         System.assertNotEquals(null, w.setParentClaimantInsured(new Contact()));
         System.assertNotEquals(null, w.setParentPolicy(new Policy__c()));
@@ -294,10 +311,14 @@ private class EligibilityModelTest {
         System.assertNotEquals(null, w.addChildToClaimRelationships(new ClaimRelationship__c()));
         System.assertNotEquals(null, w.addChildToJournals(new Journal__c()));
         System.assertNotEquals(null, w.addChildToPaymentSpecifications(new PaymentSpecification__c()));
+
+        // Any value
+        System.assertEquals('Abc123', w.setRecordTypeDeveloperName('Abc123'));
     }
 
     @IsTest
     static void benefitClaimed() {
+
         EligibilityModel.BenefitClaimed w = EligibilityModel.newBenefitClaimed(new BenefitClaimed__c());
         System.assertNotEquals(null, w.setParentClaim(new Claim__c()));
         System.assertNotEquals(null, w.setParentBenefit(new Benefit__c()));
@@ -307,8 +328,14 @@ private class EligibilityModelTest {
         System.assertNotEquals(null, w.addChildToCoveragesClaimed(new CoverageClaimed__c()));
         System.assertNotEquals(null, w.addChildToJournals(new Journal__c()));
         System.assertNotEquals(null, w.addChildToPaymentSpecifications(new PaymentSpecification__c()));
+
+        // Enum wrapper method
         System.assertEquals(EligibilityModel.BenefitClaimedRecordType.Accident, w.setRecordType('Accident'));
+        // Enum static method
         System.assertEquals(EligibilityModel.BenefitClaimedRecordType.WholeLife, EligibilityModel.BenefitClaimed.toBenefitClaimedRecordType('WholeLife'));
+        // Non-enum value
+        System.assertEquals(null, w.setRecordType('Abc123'));
+        System.assertEquals('Abc123', w.recordTypeDeveloperName);
     }
     
     ...
