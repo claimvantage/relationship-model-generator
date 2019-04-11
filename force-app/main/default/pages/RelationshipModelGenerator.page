@@ -21,11 +21,12 @@
                     <apex:inputText value="{!namespacePrefixToStrip}" />
                 </apex:pageBlockSectionItem>
                 <apex:pageBlockSectionItem >
-                    <apex:outputLabel value="Access Modifier"/>
-                    <apex:inputText value="{!accessModifier}" />
+                    <apex:outputLabel value="Global Properties (Read Access)"/>
+                    <apex:inputCheckBox value="{!propertiesGlobal}" />
                 </apex:pageBlockSectionItem>
                 <apex:pageBlockSectionItem >
-                    <!-- Blank -->
+                    <apex:outputLabel value="Global Methods (Write Access)"/>
+                    <apex:inputCheckBox value="{!methodsGlobal}" />
                 </apex:pageBlockSectionItem>
                 <apex:pageBlockSectionItem >
                     <apex:outputLabel value="SObject Types"/>
