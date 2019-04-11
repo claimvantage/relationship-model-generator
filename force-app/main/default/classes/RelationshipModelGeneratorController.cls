@@ -314,27 +314,48 @@ public with sharing class RelationshipModelGeneratorController {
         set;
     }
 
+    private String classModifier {
+        get {
+            return propertiesGlobal ||  methodsGlobal ? 'global' : 'public';
+        }
+    }
+
+    private String propertyModifier {
+        get {
+            return propertiesGlobal ? 'global' : 'public';
+        }
+    }
+
+    private String methodModifier {
+        get {
+            return methodsGlobal ? 'global' : 'public';
+        }
+    }
+
     public Integer codeLines {get; private set;}
     public Integer testLines {get; private set;}
 
     // UI form fields
     public String outerClassName {get; set;}
     public String namespacePrefixToStrip {get; set;}
-    public String accessModifier {get; set;}
     public String types {get; set;}
     public String exclusions {get; set;}
+    public Boolean propertiesGlobal {get; set;}
+    public Boolean methodsGlobal {get; set;}
     public String code {get; set;}
     public String test {get; set;}
 
     public RelationshipModelGeneratorController() {
 
+        outerClassName = 'EligibilityModel';
+        namespacePrefixToStrip = 'cve__';
+
         types = String.join(DEFAULT_TYPES, '\n');
         exclusions = String.join(DEFAULT_EXCLUSIONS, '\n');
 
-        outerClassName = 'EligibilityModel';
-        namespacePrefixToStrip = 'cve__';
-        accessModifier = 'public';
-        
+        propertiesGlobal = false;
+        methodsGlobal = false;
+
         codeLines = 0;
         testLines = 0;
     }
@@ -380,7 +401,7 @@ public with sharing class RelationshipModelGeneratorController {
         add(' * Wrapper objects are created through factory methods so subclasses can be substituted in the future.');
         add(' * Enums are generated for record types.');
         add(' */');
-        add(accessModifier + ' inherited sharing class ' + outerClassName + ' {');
+        add(classModifier + ' inherited sharing class ' + outerClassName + ' {');
 
         innerClasses();
 
@@ -418,7 +439,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add('// Record type enum');
-        add(accessModifier + ' enum ' + t.recordTypeEnumName() + ' {');
+        add(propertyModifier + ' enum ' + t.recordTypeEnumName() + ' {');
 
         indent++;
         for (Integer i = 0; i < names.size(); i++) add(names[i] + (i < names.size() - 1 ? ',' : ''));
@@ -428,7 +449,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add('// Record type enum lookup');
-        add(accessModifier + ' static ' + t.recordTypeEnumName() + ' to' + t.recordTypeEnumName() + '(String developerName) {');
+        add(methodModifier + ' static ' + t.recordTypeEnumName() + ' to' + t.recordTypeEnumName() + '(String developerName) {');
 
         indent++;
         add('for (' + t.recordTypeEnumName() + ' e : ' + t.recordTypeEnumName() + '.values()) {');
@@ -446,7 +467,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add('// Factory method');
-        add(accessModifier + ' static ' + t.className() + ' ' + t.factoryMethodName() + '(' + t.sobType() + ' sob) {');
+        add(methodModifier + ' static ' + t.className() + ' ' + t.factoryMethodName() + '(' + t.sobType() + ' sob) {');
 
         indent++;
         add(t.className() + ' w = new ' + t.className() + '();');
@@ -461,7 +482,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add('// Wrapper class');
-        add(accessModifier + ' class ' + t.className() + ' {');
+        add(classModifier + ' class ' + t.className() + ' {');
 
         classBody(t);
 
@@ -484,7 +505,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add('// Wrapped object');
-        add(accessModifier + ' ' + t.sobType() + ' sob {get; private set;}');
+        add(propertyModifier + ' ' + t.sobType() + ' sob {get; private set;}');
     }
 
     private void recordTypeFields(Type t) {
@@ -492,10 +513,10 @@ public with sharing class RelationshipModelGeneratorController {
         blank();
         if (t.recordTypeDeveloperNames.size() > 0) {
             add('// Record types known at code generation time');
-            add(accessModifier + ' ' + t.recordTypeEnumName() + ' recordType {get; private set;}');
+            add(propertyModifier + ' ' + t.recordTypeEnumName() + ' recordType {get; private set;}');
         }
         add('// Any name');
-        add(accessModifier + ' String recordTypeDeveloperName {get; private set;}');
+        add(propertyModifier + ' String recordTypeDeveloperName {get; private set;}');
     }
 
     private void recordTypeMethod(Type t) {
@@ -503,7 +524,7 @@ public with sharing class RelationshipModelGeneratorController {
         blank();
         if (t.recordTypeDeveloperNames.size() > 0) {
             add('// Set the record type starting from the developer name');
-            add(accessModifier + ' ' + t.recordTypeEnumName() + ' setRecordType(String developerName) {');
+            add(methodModifier + ' ' + t.recordTypeEnumName() + ' setRecordType(String developerName) {');
             indent++;
             add('// Any name');
             add('recordTypeDeveloperName = developerName;');
@@ -514,7 +535,7 @@ public with sharing class RelationshipModelGeneratorController {
             add('}');
         } else {
             add('// Any name');
-            add(accessModifier + ' String setRecordTypeDeveloperName(String name) {');
+            add(methodModifier + ' String setRecordTypeDeveloperName(String name) {');
             indent++;
             add('recordTypeDeveloperName = name;');
             add('return recordTypeDeveloperName;');
@@ -532,7 +553,7 @@ public with sharing class RelationshipModelGeneratorController {
                 add('// Parent wrapper object relationships');
                 firstParent = false;
             }
-            add(accessModifier + ' ' + p.parentClassName() + ' ' + p.parentRelationshipName() + ' {get; private set;}');
+            add(propertyModifier + ' ' + p.parentClassName() + ' ' + p.parentRelationshipName() + ' {get; private set;}');
         }
 
         Boolean firstChild = true;
@@ -542,7 +563,7 @@ public with sharing class RelationshipModelGeneratorController {
                 add('// Child wrapper object relationships');
                 firstChild = false;
             }
-            add(accessModifier + ' ' + c.childClassName() + '[] ' + c.childRelationshipName() + ' {');
+            add(propertyModifier + ' ' + c.childClassName() + '[] ' + c.childRelationshipName() + ' {');
             indent++;
             add('get {');
             indent++;
@@ -573,7 +594,7 @@ public with sharing class RelationshipModelGeneratorController {
                 add('// Parent object methods');
                 firstParent = false;
             }
-            add(accessModifier + ' ' + r.parentClassName() + ' ' + r.parentMethodName() + '(' + r.parentSobType() + ' sob) {');
+            add(methodModifier + ' ' + r.parentClassName() + ' ' + r.parentMethodName() + '(' + r.parentSobType() + ' sob) {');
             parentMethodBody(t, r);
             add('}');
         }
@@ -585,7 +606,7 @@ public with sharing class RelationshipModelGeneratorController {
                 add('// Child object methods');
                 firstChild = false;
             }
-            add(accessModifier + ' ' + r.childClassName() + ' ' + r.childMethodName() + '(' + r.childSobType() + ' sob) {');
+            add(methodModifier + ' ' + r.childClassName() + ' ' + r.childMethodName() + '(' + r.childSobType() + ' sob) {');
             childMethodBody(t, r);
             add('}');
         }
