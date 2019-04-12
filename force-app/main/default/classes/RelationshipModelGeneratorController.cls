@@ -24,6 +24,8 @@ public with sharing class RelationshipModelGeneratorController {
         'cve__Claim__c.cve__ClaimantInsuredAccount__c',
         'cve__BenefitClaimed__c.cve__ClaimantInsuredAccount__c',
         'cve__BenefitClaimed__c.cve__ClaimantInsured__c',
+        'cve__BenefitClaimed__c.cve__LatestJournal__c',
+        'cve__BenefitClaimed__c.cve__LatestPaymentSpecification__c',
         'cve__Benefit__c.cve__BaseBenefit__c',
         'cve__Coverage__c.cve__PercentageOf__c',
         'cve__Journal__c.cve__ClaimantInsuredAccount__c',
@@ -399,13 +401,40 @@ public with sharing class RelationshipModelGeneratorController {
         add(' * Adding a parent or a child also populates the reverse relationship.');
         add(' * The SObject is exposed so its non-relationship fields can be directly accessed.');
         add(' * Wrapper objects are created through factory methods so subclasses can be substituted in the future.');
+        add(' * A common interface is implemented by all wrapper classes.');
         add(' * Enums are generated for record types.');
         add(' */');
         add(classModifier + ' inherited sharing class ' + outerClassName + ' {');
 
+        wrapperInterface();
         innerClasses();
 
         add('}');
+    }
+
+    private void wrapperInterface() {
+
+        indent++;
+
+        blank();
+        add('//');
+        add('// All wrappers implement this');
+        add('//');
+        blank();
+        add(methodModifier + ' interface Wrapper {');
+
+        indent++;
+        blank();
+        add('// Return the wrapped SObject');
+        add('SObject getSObject();');
+        blank();
+        add('// Return the record type developer name or null if none');
+        add('String getRecordTypeDeveloperName();');
+
+        indent--;
+        add('}');
+
+        indent--;
     }
 
     private void innerClasses() {
@@ -482,7 +511,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add('// Wrapper class');
-        add(classModifier + ' class ' + t.className() + ' {');
+        add(classModifier + ' class ' + t.className() + ' implements Wrapper {');
 
         classBody(t);
 
@@ -496,6 +525,7 @@ public with sharing class RelationshipModelGeneratorController {
         recordTypeFields(t);
         classFields(t);
         classCtor(t);
+        wrapperInterfaceMethods();
         recordTypeMethod(t);
         classMethods(t);
         indent--;
@@ -612,6 +642,24 @@ public with sharing class RelationshipModelGeneratorController {
         }
     }
 
+    private void wrapperInterfaceMethods() {
+
+        blank();
+        add('// Wrapper interface methods');
+
+        add(methodModifier + ' SObject getSObject() {');
+        indent++;
+        add('return sob;');
+        indent--;
+        add('}');
+
+        add(methodModifier + ' String getRecordTypeDeveloperName() {');
+        indent++;
+        add('return recordTypeDeveloperName;');
+        indent--;
+        add('}');
+    }
+
     private void parentMethodBody(Type t, Relationship r) {
 
         indent++;
@@ -682,6 +730,8 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add(q(t.className()) + ' w = ' + q(t.factoryMethodName()) + '(new ' + t.sobType() + '());');
+
+        blank();
         for(Relationship p : t.parents) {
             add('System.assertNotEquals(null, w.' + p.parentMethodName() + '(new ' + p.parentSobType() + '()));');
         }
@@ -704,6 +754,11 @@ public with sharing class RelationshipModelGeneratorController {
             add('// Any value');
             add('System.assertEquals(\'Abc123\', w.setRecordTypeDeveloperName(\'Abc123\'));');
         }
+
+        blank();
+        add('// Wrapper interface methods');
+        add('System.assertEquals(w.sob, w.getSObject());');
+        add('System.assertEquals(w.recordTypeDeveloperName, w.getRecordTypeDeveloperName());');
     }
 
     private String q(String name) {
