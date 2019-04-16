@@ -403,10 +403,14 @@ public with sharing class RelationshipModelGeneratorController {
         add(' * Wrapper objects are created through factory methods so subclasses can be substituted in the future.');
         add(' * A common interface is implemented by all wrapper classes.');
         add(' * Enums are generated for record types.');
+        add(' * An optional filtering mechanism is available that is applied to reads.');
         add(' */');
         add(classModifier + ' inherited sharing class ' + outerClassName + ' {');
 
         wrapperInterface();
+        filterInterface();
+        noFilterClass();
+        filterProperty();
         innerClasses();
 
         add('}');
@@ -432,6 +436,81 @@ public with sharing class RelationshipModelGeneratorController {
         add('String getRecordTypeDeveloperName();');
 
         indent--;
+        add('}');
+
+        indent--;
+    }
+    
+    private void filterInterface() {
+
+        indent++;
+
+        blank();
+        add('//');
+        add('// Returned wrappers can have this filter applied');
+        add('//');
+        blank();
+        add(methodModifier + ' interface Filter {');
+
+        indent++;
+        blank();
+        add('// Return true if the wrapped object should be returned');
+        add('Boolean accept(Wrapper w);');
+
+        indent--;
+        add('}');
+
+        indent--;
+    }
+
+    private void noFilterClass() {
+
+        indent++;
+
+        blank();
+        add('//');
+        add('// Filter that returns all objects and a single gamic instance of that filter');
+        add('//');
+        blank();
+        add('private class NoFilter implements Filter {');
+
+        indent++;
+        add(methodModifier + ' Boolean accept(Wrapper w) {');
+        indent++;
+        add('// All');
+        add('return true;');
+        indent--;
+        add('}');
+
+        indent--;
+        add('}');
+
+        add('private static final Filter NO_FILTER = new NoFilter();');
+
+        indent--;
+    }
+
+    private void filterProperty() {
+
+        indent++;
+
+        blank();
+        add('//');
+        add('// Returned wrappers have this filter applied; intended for readers only');
+        add('//');
+        blank();
+        add(methodModifier + ' static Filter filter {');
+
+        indent++;
+        add('get {');
+        indent++;
+        add('if (filter == null) filter = NO_FILTER;');
+        add('return filter;');
+        indent--;
+        add('}');
+        add('set;');
+        indent--;
+
         add('}');
 
         indent--;
@@ -583,7 +662,17 @@ public with sharing class RelationshipModelGeneratorController {
                 add('// Parent wrapper object relationships');
                 firstParent = false;
             }
-            add(propertyModifier + ' ' + p.parentClassName() + ' ' + p.parentRelationshipName() + ' {get; private set;}');
+            String f = p.parentRelationshipName();
+            add(propertyModifier + ' ' + p.parentClassName() + ' ' + f + ' {');
+            indent++;
+            add('get {');
+            indent++;
+            add('return filter.accept(' + f + ') ? ' + f + ' : null;');
+            indent--;
+            add('}');
+            add('private set;');
+            indent--;
+            add('}');
         }
 
         Boolean firstChild = true;
@@ -598,7 +687,23 @@ public with sharing class RelationshipModelGeneratorController {
             add('get {');
             indent++;
             add('if (' + c.childRelationshipName() + ' == null) ' + c.childRelationshipName() + ' = new ' + c.childClassName() + '[] {};');
+            add('if (filter === NO_FILTER) {');
+            indent++;
+            add('// Returns the modifiable collection');
             add('return ' + c.childRelationshipName() + ';');
+            indent--;
+            add('} else {');
+            indent++;
+            add('// Returns a new collection');
+            add(c.childClassName() + '[] ws = new ' + c.childClassName() + '[] {};');
+            add('for (' + c.childClassName() + ' w : ' + c.childRelationshipName() + ') {');
+            indent++;
+            add('if (filter.accept(w)) ws.add(w);');
+            indent--;
+            add('}');
+            add('return ws;');
+            indent--;
+            add('}');
             indent--;
             add('}');
             add('private set;');
@@ -692,12 +797,33 @@ public with sharing class RelationshipModelGeneratorController {
         add(' * ');
         add(' * Cover the generated code.');
         add(' */');
-        add('@IsTest');
+        add('@IsTest(IsParallel=true)');
         add('private class ' + outerClassName + 'Test {');
 
+        testFilter();
         tests();
 
         add('}');
+    }
+
+    private void testFilter() {
+
+        blank();
+
+        indent++;
+        add('private class NoneFilter implements ' + q('Filter') + ' {');
+
+        indent++;
+        add(methodModifier + ' Boolean accept(' + q('Wrapper') + ' w) {');
+        indent++;
+        add('// None');
+        add('return false;');
+        indent--;
+        add('}');
+        indent--;
+
+        add('}');
+        indent--;
     }
 
     private void tests() {
@@ -729,9 +855,11 @@ public with sharing class RelationshipModelGeneratorController {
     private void testBody(Type t) {
 
         blank();
+        add('// New');
         add(q(t.className()) + ' w = ' + q(t.factoryMethodName()) + '(new ' + t.sobType() + '());');
 
         blank();
+        add('// Adds');
         for(Relationship p : t.parents) {
             add('System.assertNotEquals(null, w.' + p.parentMethodName() + '(new ' + p.parentSobType() + '()));');
         }
@@ -759,6 +887,25 @@ public with sharing class RelationshipModelGeneratorController {
         add('// Wrapper interface methods');
         add('System.assertEquals(w.sob, w.getSObject());');
         add('System.assertEquals(w.recordTypeDeveloperName, w.getRecordTypeDeveloperName());');
+
+        blank();
+        add('// Unfiltered read');
+        for(Relationship p : t.parents) {
+            add('System.assertNotEquals(null, w.' + p.parentRelationshipName() + ');');
+        }
+        for(Relationship c : t.children) {
+            add('System.assertEquals(1, w.' + c.childRelationshipName() + '.size());');
+        }
+
+        blank();
+        add('// Filtered read');
+        add(q('filter') + ' = new NoneFilter();');
+        for(Relationship p : t.parents) {
+            add('System.assertEquals(null, w.' + p.parentRelationshipName() + ');');
+        }
+        for(Relationship c : t.children) {
+            add('System.assertEquals(0, w.' + c.childRelationshipName() + '.size());');
+        }
     }
 
     private String q(String name) {
