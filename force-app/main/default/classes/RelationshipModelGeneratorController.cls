@@ -404,6 +404,7 @@ public with sharing class RelationshipModelGeneratorController {
         add(' * A common interface is implemented by all wrapper classes.');
         add(' * Enums are generated for record types.');
         add(' * An optional filtering mechanism is available that is applied to reads.');
+        add(' * Every wrapper can offer an identify value in the form of a syntacticaslly valid but sometimes fake Id.');
         add(' */');
         add(classModifier + ' inherited sharing class ' + outerClassName + ' {');
 
@@ -411,6 +412,7 @@ public with sharing class RelationshipModelGeneratorController {
         filterInterface();
         noFilterClass();
         filterProperty();
+        fakeIdGenerator();
         innerClasses();
 
         add('}');
@@ -432,8 +434,17 @@ public with sharing class RelationshipModelGeneratorController {
         add('// Return the wrapped SObject');
         add('SObject getSObject();');
         blank();
+        add('// Return the identity of the SObject (can be a fake Id value for non-persisted SObjects)');
+        add('Id getId();');
+        blank();
         add('// Return the record type developer name or null if none');
         add('String getRecordTypeDeveloperName();');
+        blank();
+        add('// Return all parent wrappers (typically of multiple types)');
+        add('Wrapper[] getAllParents();');
+        blank();
+        add('// Return all child wrappers (typically of multiple types)');
+        add('Wrapper[] getAllChildren();');
 
         indent--;
         add('}');
@@ -485,7 +496,7 @@ public with sharing class RelationshipModelGeneratorController {
         indent--;
         add('}');
 
-        add('private static final Filter NO_FILTER = new NoFilter();');
+        add(methodModifier + ' static final Filter NO_FILTER = new NoFilter();');
 
         indent--;
     }
@@ -601,10 +612,11 @@ public with sharing class RelationshipModelGeneratorController {
 
         indent++;
         wrappedObject(t);
+        transientIdField(t);
         recordTypeFields(t);
         classFields(t);
         classCtor(t);
-        wrapperInterfaceMethods();
+        wrapperInterfaceMethods(t);
         recordTypeMethod(t);
         classMethods(t);
         indent--;
@@ -615,6 +627,13 @@ public with sharing class RelationshipModelGeneratorController {
         blank();
         add('// Wrapped object');
         add(propertyModifier + ' ' + t.sobType() + ' sob {get; private set;}');
+    }
+
+    private void transientIdField(Type t) {
+
+        blank();
+        add('// Either the SObject Id or a temporary fake Id');
+        add('private Id transientId;');
     }
 
     private void recordTypeFields(Type t) {
@@ -747,7 +766,7 @@ public with sharing class RelationshipModelGeneratorController {
         }
     }
 
-    private void wrapperInterfaceMethods() {
+    private void wrapperInterfaceMethods(Type t) {
 
         blank();
         add('// Wrapper interface methods');
@@ -758,9 +777,40 @@ public with sharing class RelationshipModelGeneratorController {
         indent--;
         add('}');
 
+        add(methodModifier + ' Id getId() {');
+        indent++;
+        add('if (transientId == null) {');
+        indent++;
+        add('transientId = sob.Id != null ? sob.Id : nextFakeId(' + t.sobType() + '.SObjectType);');
+        indent--;
+        add('}');
+        add('return transientId;');
+        indent--;
+        add('}');
+
         add(methodModifier + ' String getRecordTypeDeveloperName() {');
         indent++;
         add('return recordTypeDeveloperName;');
+        indent--;
+        add('}');
+
+        add(methodModifier + ' Wrapper[] getAllParents() {');
+        indent++;
+        add('Wrapper[] ws = new Wrapper[] {};');
+        for(Relationship r : t.parents) {
+            add('if (' + r.parentRelationshipName() + ' != null) ws.add(' + r.parentRelationshipName() + ');');
+        }
+        add('return ws;');
+        indent--;
+        add('}');
+
+        add(methodModifier + ' Wrapper[] getAllChildren() {');
+        indent++;
+        add('Wrapper[] ws = new Wrapper[] {};');
+        for(Relationship r : t.children) {
+            add('ws.addAll(' + r.childRelationshipName()  + ');');
+        }
+        add('return ws;');
         indent--;
         add('}');
     }
@@ -783,6 +833,31 @@ public with sharing class RelationshipModelGeneratorController {
         add(r.childRelationshipName() + '.add(w);');
         add('w.' + r.parentRelationshipName() + ' = this;');
         add('return w;');
+        indent--;
+    }
+
+    private void fakeIdGenerator() {
+
+        indent++;
+        blank();
+        add('//');
+        add('// Generate a syntactically valid but fake Id');
+        add('//');
+        blank();
+        add('private static Integer nextFakeIdInteger = 0;');
+        blank();
+        add('private static Id nextFakeId(SObjectType t) {');
+        indent++;
+        blank();
+        add('String RESERVED = \'000\';');
+        add('String FAKE_TOKEN = \'FAKE\';');
+        blank();
+        add('String keyPrefix = t.getDescribe().getKeyPrefix();');
+        add('String n = String.valueOf(nextFakeIdInteger++);');
+        blank();
+        add('return keyPrefix + RESERVED + FAKE_TOKEN + \'0\'.repeat(15 - keyPrefix.length() - RESERVED.length() - FAKE_TOKEN.length() - n.length()) + n;');
+        indent--;
+        add('}');
         indent--;
     }
 
@@ -887,6 +962,8 @@ public with sharing class RelationshipModelGeneratorController {
         add('// Wrapper interface methods');
         add('System.assertEquals(w.sob, w.getSObject());');
         add('System.assertEquals(w.recordTypeDeveloperName, w.getRecordTypeDeveloperName());');
+        add('System.assertNotEquals(null, w.getId());');
+        add('System.assertEquals(' + t.sobType() + '.SObjectType, w.getId().getSObjectType());');
 
         blank();
         add('// Unfiltered read');
