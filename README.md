@@ -4,7 +4,7 @@
 
 When SObjects are queried in a single query, their parent-child `__r` fields are populated and can be used to navigate from one object to the other. But SOQL doesn't allow a deep tree of objects to be queried in one go, and the collection `__r` fields are immutable.
 
-This Visualforce page code generator produces an inner class per SObject that wraps the SObject and adds fields to model the parent and child relationships. Apex `enum`s are created for the Record Types. Convenience methods are included to connect up parent or child objects and ensure that the relationship fields are set. A filtering mechanism is available for reds. A test class is also generated, primarily to ensure the generated code has test coverage.
+This Visualforce page code generator produces an inner class per SObject that wraps the SObject and adds fields to model the parent and child relationships. Apex `enum`s are created for the Record Types. Convenience methods are included to connect up parent or child objects and ensure that the relationship fields are set. A filtering mechanism is available for reads. Where an `Id` isn't already known a syntacically valid fake `Id` is generated so map logic keyed by `Id` can be used. A test class is also generated, primarily to ensure the generated code has test coverage.
 
 Use this unchanged or clone and make your own changes. The code is generic - there are just a few default values tied to our specific objects. We are not looking for contributions, but rather just sharing some code that may be useful to others.
 
