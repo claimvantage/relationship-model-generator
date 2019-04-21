@@ -133,8 +133,16 @@ public with sharing class RelationshipModelGeneratorController {
             return stripRelationshipName(String.valueOf(parentRelationshipField)).uncapitalize();
         }
 
+        String rawParentRelationshipName() {
+            return toRelationshipName(parentRelationshipField);
+        }
+
         String childRelationshipName() {
             return stripRelationshipName(relationshipName).uncapitalize() + (deduplicate ? 'Children' : '');
+        }
+
+        String rawChildRelationshipName() {
+            return relationshipName;
         }
 
         String parentMethodName() {
@@ -157,6 +165,14 @@ public with sharing class RelationshipModelGeneratorController {
             s = s.removeEnd('__c');
             s = s.removeEnd('__r');
             s = s.removeStart(controller.namespacePrefixToStrip);
+            return s;
+        }
+
+        String toRelationshipName(SObjectField f) {
+            String s = String.valueOf(f);
+            if (s.endsWith('__c')) {
+                return s.removeEnd('__c') + '__r';
+            }
             return s;
         }
 
@@ -404,18 +420,37 @@ public with sharing class RelationshipModelGeneratorController {
         add(' * A common interface is implemented by all wrapper classes.');
         add(' * Enums are generated for record types.');
         add(' * An optional filtering mechanism is available that is applied to reads.');
-        add(' * Every wrapper can offer an identify value in the form of a syntacticaslly valid but sometimes fake Id.');
+        add(' * Every wrapper can offer an identify value in the form of a syntactically valid but sometimes fake Id.');
+        add(' * A "mapified" format of the data - nested Maps using the relationship names - can be generated.');
         add(' */');
         add(classModifier + ' inherited sharing class ' + outerClassName + ' {');
 
+        exceptionClass();
         wrapperInterface();
         filterInterface();
         noFilterClass();
         filterProperty();
         fakeIdGenerator();
+        relationshipClass();
         innerClasses();
+        mapifyStaticMethod();
 
         add('}');
+    }
+
+    private void exceptionClass() {
+
+        indent++;
+
+        blank();
+        add('//');
+        add('// For problems');
+        add('//');
+        add(methodModifier + ' class ' + outerClassName + 'Exception extends Exception {');
+        add('}');
+
+        indent--;
+
     }
 
     private void wrapperInterface() {
@@ -426,7 +461,6 @@ public with sharing class RelationshipModelGeneratorController {
         add('//');
         add('// All wrappers implement this');
         add('//');
-        blank();
         add(methodModifier + ' interface Wrapper {');
 
         indent++;
@@ -434,17 +468,32 @@ public with sharing class RelationshipModelGeneratorController {
         add('// Return the wrapped SObject');
         add('SObject getSObject();');
         blank();
+        add('// Return the wrapped SObject type');
+        add('SObjectType getSObjectType();');
+        blank();
         add('// Return the identity of the SObject (can be a fake Id value for non-persisted SObjects)');
         add('Id getId();');
         blank();
         add('// Return the record type developer name or null if none');
         add('String getRecordTypeDeveloperName();');
+        
         blank();
-        add('// Return all parent wrappers (typically of multiple types)');
-        add('Wrapper[] getAllParents();');
+        add('// Return a specific parent wrapper');
+        add('Wrapper getParent(String relationshipName);');
         blank();
-        add('// Return all child wrappers (typically of multiple types)');
-        add('Wrapper[] getAllChildren();');
+        add('// Return a specific array of child wrappers');
+        add('Wrapper[] getChildren(String relationshipName);');
+
+        blank();
+        add('// Convert to form suitable for returning to external code without globals');
+        add('Map<String, Object> mapify(Map<Id, Object> visited);');
+
+        blank();
+        add('// Relationship names in both directions');
+        add('Relationship[] getParentRelationships();');
+        blank();
+        add('// Relationship names in both directions');
+        add('Relationship[] getChildRelationships();');
 
         indent--;
         add('}');
@@ -460,7 +509,6 @@ public with sharing class RelationshipModelGeneratorController {
         add('//');
         add('// Returned wrappers can have this filter applied');
         add('//');
-        blank();
         add(methodModifier + ' interface Filter {');
 
         indent++;
@@ -482,7 +530,6 @@ public with sharing class RelationshipModelGeneratorController {
         add('//');
         add('// Filter that returns all objects and a single gamic instance of that filter');
         add('//');
-        blank();
         add('private class NoFilter implements Filter {');
 
         indent++;
@@ -509,7 +556,6 @@ public with sharing class RelationshipModelGeneratorController {
         add('//');
         add('// Returned wrappers have this filter applied; intended for readers only');
         add('//');
-        blank();
         add(methodModifier + ' static Filter filter {');
 
         indent++;
@@ -777,6 +823,12 @@ public with sharing class RelationshipModelGeneratorController {
         indent--;
         add('}');
 
+        add(methodModifier + ' SObjectType getSObjectType() {');
+        indent++;
+        add('return sob.getSObjectType();');
+        indent--;
+        add('}');
+
         add(methodModifier + ' Id getId() {');
         indent++;
         add('if (transientId == null) {');
@@ -794,25 +846,143 @@ public with sharing class RelationshipModelGeneratorController {
         indent--;
         add('}');
 
-        add(methodModifier + ' Wrapper[] getAllParents() {');
+        add(methodModifier + ' Wrapper getParent(String relationshipName) {');
         indent++;
-        add('Wrapper[] ws = new Wrapper[] {};');
+        add('switch on relationshipName {');
+        indent++;
         for(Relationship r : t.parents) {
-            add('if (' + r.parentRelationshipName() + ' != null) ws.add(' + r.parentRelationshipName() + ');');
+            add('when \'' + r.parentRelationshipName() + '\' { return ' + r.parentRelationshipName() + '; }');
         }
-        add('return ws;');
+        add('when else { throw new ' + outerClassName + 'Exception(\'Bad parent relationshipName \' + relationshipName); }');
+        indent--;
+        add('}');
         indent--;
         add('}');
 
-        add(methodModifier + ' Wrapper[] getAllChildren() {');
+        add(methodModifier + ' Wrapper[] getChildren(String relationshipName) {');
         indent++;
-        add('Wrapper[] ws = new Wrapper[] {};');
+        add('switch on relationshipName {');
+        indent++;
         for(Relationship r : t.children) {
-            add('ws.addAll(' + r.childRelationshipName()  + ');');
+            add('when \'' + r.childRelationshipName() + '\' { return ' + r.childRelationshipName() + '; }');
         }
-        add('return ws;');
+        add('when else { throw new ' + outerClassName + 'Exception(\'Bad children relationshipName \' + relationshipName); }');
         indent--;
         add('}');
+        indent--;
+        add('}');
+
+        add(methodModifier + ' Relationship[] getParentRelationships() {');
+        indent++;
+        add('return new Relationship[] {');
+        indent++;
+        for(Integer i = 0; i < t.parents.size(); i++) {
+            Boolean last = i == t.parents.size() - 1;
+            Relationship r = t.parents[i];
+            add('new Relationship('
+                + '\'' + r.parentRelationshipName()
+                + '\', \'' + r.rawParentRelationshipName() 
+                + '\', \'' + r.childRelationshipName()
+                + '\', \'' + r.rawChildRelationshipName()
+                + '\''
+                + (last ? ')' : '),')
+            );
+        }
+        indent--;
+        add('};');
+        indent--;
+        add('}');
+
+        add(methodModifier + ' Relationship[] getChildRelationships() {');
+        indent++;
+        add('return new Relationship[] {');
+        indent++;
+        for(Integer i = 0; i < t.children.size(); i++) {
+            Boolean last = i == t.children.size() - 1;
+            Relationship r = t.children[i];
+            add('new Relationship('
+                + '\'' + r.parentRelationshipName()
+                + '\', \'' + r.rawParentRelationshipName() 
+                + '\', \'' + r.childRelationshipName()
+                + '\', \'' + r.rawChildRelationshipName()
+                + '\''
+                + (last ? ')' : '),')
+            );
+        }
+        indent--;
+        add('};');
+        indent--;
+        add('}');
+
+        add(methodModifier + ' Map<String, Object> mapify(Map<Id, Object> visited) {');
+        indent++;
+        add('return mapify(this, visited);');
+        indent--;
+        add('}');
+    }
+
+    private void mapifyStaticMethod() {
+
+        indent++;
+
+        blank();
+        add('// Wrappers share this code');
+        add('private static Map<String, Object> mapify(Wrapper w, Map<Id, Object> visited) {');
+        indent++;
+
+        blank();
+        add('// Avoid cycles');
+        add('if (visited.containsKey(w.getId())) return (Map<String, Object>) visited.get(w.getId());');
+        blank();
+        add('// A map per SObject');
+        add('Map<String, Object> m = new Map<String, Object>();');
+        add('visited.put(w.getId(), m);');
+        add('m.putAll(w.getSObject().getPopulatedFieldsAsMap());');
+        add('m.put(\'Id\', w.getId());');
+        blank();
+        add('// Rest API style meta data');
+        add('Map<String, Object> a = new Map<String, Object>();');
+        add('a.put(\'type\', String.valueOf(w.getSObject().getSObjectType()));');
+        add('if (w.getRecordTypeDeveloperName() != null) a.put(\'recordType\', w.getRecordTypeDeveloperName());');
+        add('m.put(\'attributes\', a);');
+
+        blank();
+        add('// Children first');
+        add('for (Relationship r : w.getChildRelationships()) {');
+        indent++;
+        add('List<Map<String, Object>> l = new List<Map<String, Object>>();');
+        add('for (Wrapper c : w.getChildren(r.child)) {');
+        indent++;
+        add('Map<String, object> cMap = c.mapify(visited);');
+        add('l.add(cMap);');
+        indent--;
+        add('}');
+        add('// Children reference');
+        add('if (l.size() > 0) m.put(r.rawChild, l);');
+        indent--;
+        add('}');
+
+        blank();
+        add('// Parents second');
+        add('for (Relationship r : w.getParentRelationships()) {');
+        indent++;
+        add('Wrapper p = w.getParent(r.parent);');
+        add('if (p != null) {');
+        indent++;
+        add('Map<String, object> pMap = p.mapify(visited);');
+        add('// Parent reference');
+        add('m.put(r.rawParent, pMap);');
+        indent--;
+        add('}');
+        indent--;
+        add('}');
+
+        blank();
+        add('return m;');
+        indent--;
+        add('}');
+
+        indent--;
     }
 
     private void parentMethodBody(Type t, Relationship r) {
@@ -843,7 +1013,6 @@ public with sharing class RelationshipModelGeneratorController {
         add('//');
         add('// Generate a syntactically valid but fake Id');
         add('//');
-        blank();
         add('private static Integer nextFakeIdInteger = 0;');
         blank();
         add('private static Id nextFakeId(SObjectType t) {');
@@ -858,6 +1027,39 @@ public with sharing class RelationshipModelGeneratorController {
         add('return keyPrefix + RESERVED + FAKE_TOKEN + \'0\'.repeat(15 - keyPrefix.length() - RESERVED.length() - FAKE_TOKEN.length() - n.length()) + n;');
         indent--;
         add('}');
+        indent--;
+    }
+
+    private void relationshipClass() {
+
+        indent++;
+
+        blank();
+        add('//');
+        add('// Relationship names in both directions');
+        add('//');
+        add(methodModifier + ' class Relationship {');
+        indent++;
+
+        blank();
+        add('String parent;');
+        add('String rawParent;');
+        add('String child;');
+        add('String rawChild;');
+        blank();
+
+        add('Relationship(String parent, String rawParent, String child, String rawChild) {');
+        indent++;
+        add('this.parent = parent;');
+        add('this.rawParent = rawParent;');
+        add('this.child = child;');
+        add('this.rawChild = rawChild;');
+        indent--;
+        add('}');
+
+        indent--;
+        add('}');
+
         indent--;
     }
 
@@ -961,9 +1163,12 @@ public with sharing class RelationshipModelGeneratorController {
         blank();
         add('// Wrapper interface methods');
         add('System.assertEquals(w.sob, w.getSObject());');
+        add('System.assertEquals(w.getSObject().getSObjectType(), w.getSObjectType());');
         add('System.assertEquals(w.recordTypeDeveloperName, w.getRecordTypeDeveloperName());');
         add('System.assertNotEquals(null, w.getId());');
         add('System.assertEquals(' + t.sobType() + '.SObjectType, w.getId().getSObjectType());');
+        add('System.assertNotEquals(null, w.getParentRelationships());');
+        add('System.assertNotEquals(null, w.getChildRelationships());');
 
         blank();
         add('// Unfiltered read');
