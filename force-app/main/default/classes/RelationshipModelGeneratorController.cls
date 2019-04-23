@@ -942,7 +942,7 @@ public with sharing class RelationshipModelGeneratorController {
         blank();
         add('// Rest API style meta data');
         add('Map<String, Object> a = new Map<String, Object>();');
-        add('a.put(\'type\', String.valueOf(w.getSObject().getSObjectType()));');
+        add('a.put(\'type\', String.valueOf(w.getSObjectType()));');
         add('if (w.getRecordTypeDeveloperName() != null) a.put(\'recordType\', w.getRecordTypeDeveloperName());');
         add('m.put(\'attributes\', a);');
 
