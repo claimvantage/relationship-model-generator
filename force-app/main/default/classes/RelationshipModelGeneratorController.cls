@@ -1042,10 +1042,10 @@ public with sharing class RelationshipModelGeneratorController {
         indent++;
 
         blank();
-        add('String parent;');
-        add('String rawParent;');
-        add('String child;');
-        add('String rawChild;');
+        add(methodModifier + ' final String parent;');
+        add(methodModifier + ' final String rawParent;');
+        add(methodModifier + ' final String child;');
+        add(methodModifier + ' final String rawChild;');
         blank();
 
         add('Relationship(String parent, String rawParent, String child, String rawChild) {');
