@@ -22,6 +22,7 @@ public with sharing class RelationshipModelGeneratorController {
     private static final String[] DEFAULT_EXCLUSIONS = new String[] {
         'cve__Claim__c.cve__PrecedingClaim__c',
         'cve__Claim__c.cve__ClaimantInsuredAccount__c',
+        'cve__Claim__c.cve__LatestJournal__c',
         'cve__BenefitClaimed__c.cve__ClaimantInsuredAccount__c',
         'cve__BenefitClaimed__c.cve__ClaimantInsured__c',
         'cve__BenefitClaimed__c.cve__LatestJournal__c',
@@ -36,6 +37,11 @@ public with sharing class RelationshipModelGeneratorController {
         'Contact.cve__Parent__c',
         'Contact.cve__Spouse__c',
         'Account.ParentId'
+    };
+
+    private static final String[] DEFAULT_EXTENSIBLEMODELCLASSES = new String[] {
+        'Claim',
+        'BenefitClaimed'
     };
 
     // Per SObject
@@ -88,6 +94,7 @@ public with sharing class RelationshipModelGeneratorController {
             }
             return s;
         }
+
     }
 
     // Per relationship
@@ -350,6 +357,16 @@ public with sharing class RelationshipModelGeneratorController {
         }
     }
 
+    private Set<String> extensibleClassNames {get;set;}
+
+    private Boolean extensible(Type t) {
+        return extensibleClassNames.contains(t.className());
+    }
+
+    private String factoryInstanceName(String className) {
+        return className.substring(0, 1).toLowerCase() + className.substring(1) + 'Factory';
+    }
+
     public Integer codeLines {get; private set;}
     public Integer testLines {get; private set;}
 
@@ -358,6 +375,7 @@ public with sharing class RelationshipModelGeneratorController {
     public String namespacePrefixToStrip {get; set;}
     public String types {get; set;}
     public String exclusions {get; set;}
+    public String extensibleModelClasses {get;set;}
     public Boolean propertiesGlobal {get; set;}
     public Boolean methodsGlobal {get; set;}
     public String code {get; set;}
@@ -370,6 +388,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         types = String.join(DEFAULT_TYPES, '\n');
         exclusions = String.join(DEFAULT_EXCLUSIONS, '\n');
+        extensibleModelClasses = String.join(DEFAULT_EXTENSIBLEMODELCLASSES, '\n');
 
         propertiesGlobal = false;
         methodsGlobal = false;
@@ -379,6 +398,10 @@ public with sharing class RelationshipModelGeneratorController {
     }
 
     public PageReference generate() {
+        extensibleClassNames = new Set<String>();
+        for (String cls : extensibleModelClasses.split('\n')) {
+            extensibleClassNames.add(cls.trim());
+        }
 
         lines.clear();
         outerClass();
@@ -430,6 +453,7 @@ public with sharing class RelationshipModelGeneratorController {
         filterInterface();
         noFilterClass();
         filterProperty();
+        factories();
         fakeIdGenerator();
         relationshipClass();
         innerClasses();
@@ -573,6 +597,49 @@ public with sharing class RelationshipModelGeneratorController {
         indent--;
     }
 
+    private void factories() {
+        indent++;
+        blank();
+        add('//');
+        add('// Factory interfaces and default factories');
+        add('//');
+
+        for (String cls : extensibleClassNames) {
+            add(classModifier + ' interface ' + cls + 'Factory {');
+            indent++;
+            add(cls + ' new' + cls + '();');
+            indent--;
+            add('}');
+            blank();
+
+            add(classModifier + ' class Default' + cls + 'Factory implements ' + cls + 'Factory {');
+            indent++;
+            add(methodModifier + ' ' + cls + ' new' + cls + '() {');
+            indent++;
+            add('return new ' + cls + '();');
+            indent--;
+            add('}');
+            indent--;
+            add('}');
+            blank();
+            
+            add(classModifier + ' static ' + cls + 'Factory ' + factoryInstanceName(cls) + ' {');
+            indent++;
+            add('get {');
+            indent++;
+            add('if (' + factoryInstanceName(cls) + ' == null) ' + factoryInstanceName(cls) + ' = new Default' + cls + 'Factory();');
+            add('return ' + factoryInstanceName(cls) + ';');
+            indent--;
+            add('}');
+            add('set;');
+            indent--;
+            add('}'); 
+            blank();
+        }
+
+        indent--;
+    }
+
     private void innerClasses() {
 
         indent++;
@@ -635,7 +702,12 @@ public with sharing class RelationshipModelGeneratorController {
         add(methodModifier + ' static ' + t.className() + ' ' + t.factoryMethodName() + '(' + t.sobType() + ' sob) {');
 
         indent++;
-        add(t.className() + ' w = new ' + t.className() + '();');
+
+        if (extensible(t)) {
+            add(t.className() + ' w = ' + factoryInstanceName(t.className()) + '.' + t.factoryMethodName() + '();');
+        } else {
+            add(t.className() + ' w = new ' + t.className() + '();');
+        }
         add('w.sob = sob;');
         add('return w;');
         indent--;
@@ -647,7 +719,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add('// Wrapper class');
-        add(classModifier + ' class ' + t.className() + ' implements Wrapper {');
+        add(classModifier + (extensible(t) ? ' virtual class ' : ' class ') + t.className() + ' implements Wrapper {');
 
         classBody(t);
 
@@ -778,10 +850,9 @@ public with sharing class RelationshipModelGeneratorController {
     }
 
     private void classCtor(Type t) {
-
         blank();
         add('// Create via factory method only');
-        add('private ' + t.className() +  '() {');
+        add((extensible(t) ? 'protected ' : 'private ') + t.className() +  '() {');
         add('}');
     }
 
@@ -1042,10 +1113,10 @@ public with sharing class RelationshipModelGeneratorController {
         indent++;
 
         blank();
-        add(methodModifier + ' final String parent;');
-        add(methodModifier + ' final String rawParent;');
-        add(methodModifier + ' final String child;');
-        add(methodModifier + ' final String rawChild;');
+        add(methodModifier + ' String parent;');
+        add(methodModifier + ' String rawParent;');
+        add(methodModifier + ' String child;');
+        add(methodModifier + ' String rawChild;');
         blank();
 
         add('Relationship(String parent, String rawParent, String child, String rawChild) {');
