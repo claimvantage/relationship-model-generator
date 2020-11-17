@@ -39,9 +39,9 @@ public with sharing class RelationshipModelGeneratorController {
         'Account.ParentId'
     };
 
-    private static final String[] DEFAULT_EXTENSIBLEMODELCLASSES = new String[] {
-        'Claim',
-        'BenefitClaimed'
+    private static final String[] DEFAULT_EXTENSIBLETYPES = new String[] {
+        'cve__Claim__c',
+        'cve__BenefitClaimed__c'
     };
 
     // Per SObject
@@ -72,6 +72,10 @@ public with sharing class RelationshipModelGeneratorController {
             return 'new' + className();
         }
 
+        String factoryInstanceName() {
+            return className().substring(0, 1).toLowerCase() + className().substring(1) + 'Factory';
+        }
+
         String className() {
             return toClassName(sobType);
         }
@@ -93,6 +97,10 @@ public with sharing class RelationshipModelGeneratorController {
                 s = s + 'Wrapper';
             }
             return s;
+        }
+
+        Boolean extensible() {
+            return controller.extensibleSobTypes.contains(sobType);
         }
 
     }
@@ -250,6 +258,28 @@ public with sharing class RelationshipModelGeneratorController {
         set;
     }
 
+    private transient Set<SObjectType> extensibleSobTypes {
+        get {
+            if (extensibleSobTypes == null) {
+                extensibleSobTypes = new Set<SObjectType>();
+
+                Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
+                for (String type : extensibleTypes.split('\n')) {
+                    type = type.trim();
+                    SObjectType t = gd.get(type);
+                    if (t != null) {
+                        extensibleSobTypes.add(t);
+                    } else {
+                        addError('Did not recognise SObjectType ' + type + ' so it will not be extensible');
+                    }
+                }
+            }
+            return extensibleSobTypes;
+        }
+        set;
+    }
+
+
     private transient Map<SObjectType, Type> typeInfo {
         get {
             if (typeInfo == null) {
@@ -357,16 +387,6 @@ public with sharing class RelationshipModelGeneratorController {
         }
     }
 
-    private Set<String> extensibleClassNames {get;set;}
-
-    private Boolean extensible(Type t) {
-        return extensibleClassNames.contains(t.className());
-    }
-
-    private String factoryInstanceName(String className) {
-        return className.substring(0, 1).toLowerCase() + className.substring(1) + 'Factory';
-    }
-
     public Integer codeLines {get; private set;}
     public Integer testLines {get; private set;}
 
@@ -375,7 +395,7 @@ public with sharing class RelationshipModelGeneratorController {
     public String namespacePrefixToStrip {get; set;}
     public String types {get; set;}
     public String exclusions {get; set;}
-    public String extensibleModelClasses {get;set;}
+    public String extensibleTypes {get;set;}
     public Boolean propertiesGlobal {get; set;}
     public Boolean methodsGlobal {get; set;}
     public String code {get; set;}
@@ -388,7 +408,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         types = String.join(DEFAULT_TYPES, '\n');
         exclusions = String.join(DEFAULT_EXCLUSIONS, '\n');
-        extensibleModelClasses = String.join(DEFAULT_EXTENSIBLEMODELCLASSES, '\n');
+        extensibleTypes = String.join(DEFAULT_EXTENSIBLETYPES, '\n');
 
         propertiesGlobal = false;
         methodsGlobal = false;
@@ -398,10 +418,6 @@ public with sharing class RelationshipModelGeneratorController {
     }
 
     public PageReference generate() {
-        extensibleClassNames = new Set<String>();
-        for (String cls : extensibleModelClasses.split('\n')) {
-            extensibleClassNames.add(cls.trim());
-        }
 
         lines.clear();
         outerClass();
@@ -604,31 +620,34 @@ public with sharing class RelationshipModelGeneratorController {
         add('// Factory interfaces and default factories');
         add('//');
 
-        for (String cls : extensibleClassNames) {
-            add(classModifier + ' interface ' + cls + 'Factory {');
+        for (SObjectType t : extensibleSobTypes) {
+            Type info = typeInfo.get(t);
+            if (info == null) continue;
+
+            add(classModifier + ' interface ' + info.className() + 'Factory {');
             indent++;
-            add(cls + ' new' + cls + '();');
+            add(info.className() + ' new' + info.className() + '();');
             indent--;
             add('}');
             blank();
 
-            add(classModifier + ' class Default' + cls + 'Factory implements ' + cls + 'Factory {');
+            add(classModifier + ' class Default' + info.className() + 'Factory implements ' + info.className() + 'Factory {');
             indent++;
-            add(methodModifier + ' ' + cls + ' new' + cls + '() {');
+            add(methodModifier + ' ' + info.className() + ' new' + info.className() + '() {');
             indent++;
-            add('return new ' + cls + '();');
+            add('return new ' + info.className() + '();');
             indent--;
             add('}');
             indent--;
             add('}');
             blank();
             
-            add(classModifier + ' static ' + cls + 'Factory ' + factoryInstanceName(cls) + ' {');
+            add(classModifier + ' static ' + info.className() + 'Factory ' + info.factoryInstanceName() + ' {');
             indent++;
             add('get {');
             indent++;
-            add('if (' + factoryInstanceName(cls) + ' == null) ' + factoryInstanceName(cls) + ' = new Default' + cls + 'Factory();');
-            add('return ' + factoryInstanceName(cls) + ';');
+            add('if (' + info.factoryInstanceName() + ' == null) ' + info.factoryInstanceName() + ' = new Default' + info.className() + 'Factory();');
+            add('return ' + info.factoryInstanceName() + ';');
             indent--;
             add('}');
             add('set;');
@@ -703,8 +722,8 @@ public with sharing class RelationshipModelGeneratorController {
 
         indent++;
 
-        if (extensible(t)) {
-            add(t.className() + ' w = ' + factoryInstanceName(t.className()) + '.' + t.factoryMethodName() + '();');
+        if (t.extensible()) {
+            add(t.className() + ' w = ' + t.factoryInstanceName() + '.' + t.factoryMethodName() + '();');
         } else {
             add(t.className() + ' w = new ' + t.className() + '();');
         }
@@ -719,7 +738,7 @@ public with sharing class RelationshipModelGeneratorController {
 
         blank();
         add('// Wrapper class');
-        add(classModifier + (extensible(t) ? ' virtual class ' : ' class ') + t.className() + ' implements Wrapper {');
+        add(classModifier + (t.extensible() ? ' virtual class ' : ' class ') + t.className() + ' implements Wrapper {');
 
         classBody(t);
 
@@ -852,7 +871,7 @@ public with sharing class RelationshipModelGeneratorController {
     private void classCtor(Type t) {
         blank();
         add('// Create via factory method only');
-        add((extensible(t) ? 'protected ' : 'private ') + t.className() +  '() {');
+        add((t.extensible() ? 'protected ' : 'private ') + t.className() +  '() {');
         add('}');
     }
 

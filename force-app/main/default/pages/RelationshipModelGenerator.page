@@ -36,9 +36,9 @@
                     <apex:outputLabel value="Relationship Fields to Exclude"/>
                     <apex:inputTextarea value="{!exclusions}" rows="5" style="width: 30em"/>
                 </apex:pageBlockSectionItem>
-                <apex:pageBlockSectionItem >
-                    <apex:outputLabel value="Extensible Model Classes"/>
-                    <apex:inputTextarea value="{!extensibleModelClasses}" rows="3" style="width: 30em"/>
+                <apex:pageBlockSectionItem helpText="New-line separated list of SObject Types. The relative Wrapper classes will be virtual, so extensible.">
+                    <apex:outputLabel value="Make Model Classes extensible for Types"/>
+                    <apex:inputTextarea value="{!extensibleTypes}" rows="3" style="width: 30em"/>
                 </apex:pageBlockSectionItem>
             </apex:pageBlockSection>
 
