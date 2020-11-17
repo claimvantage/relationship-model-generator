@@ -73,7 +73,7 @@ public with sharing class RelationshipModelGeneratorController {
         }
 
         String factoryInstanceName() {
-            return className().substring(0, 1).toLowerCase() + className().substring(1) + 'Factory';
+            return className().uncapitalize() + 'Factory';
         }
 
         String className() {
@@ -203,17 +203,17 @@ public with sharing class RelationshipModelGeneratorController {
         }
     }
 
-    private transient Set<SObjectType> sobTypes {
+    private transient Map<String, SObjectType> sobTypes {
         get {
             if (sobTypes == null) {
-                sobTypes = new Set<SObjectType>();
+                sobTypes = new Map<String, SObjectType>();
 
                 Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
                 for (String type : types.split('\n')) {
                     type = type.trim();
                     SObjectType t = gd.get(type);
                     if (t != null) {
-                        sobTypes.add(t);
+                        sobTypes.put(type, t);
                     } else {
                         addError('Did not recognise SObjectType ' + type + ' so no code generated for that');
                     }
@@ -263,14 +263,13 @@ public with sharing class RelationshipModelGeneratorController {
             if (extensibleSobTypes == null) {
                 extensibleSobTypes = new Set<SObjectType>();
 
-                Map<String, Schema.SObjectType> gd = Schema.getGlobalDescribe();
                 for (String type : extensibleTypes.split('\n')) {
                     type = type.trim();
-                    SObjectType t = gd.get(type);
-                    if (t != null) {
-                        extensibleSobTypes.add(t);
+                    SObjectType sobType = sobTypes.get(type);
+                    if (sobType != null) {
+                        extensibleSobTypes.add(sobType);
                     } else {
-                        addError('Did not recognise SObjectType ' + type + ' so it will not be extensible');
+                        addError(type + ' is not in selected SObject Types so it will not be extensible');
                     }
                 }
             }
@@ -285,7 +284,7 @@ public with sharing class RelationshipModelGeneratorController {
             if (typeInfo == null) {
                 typeInfo = new Map<SObjectType, Type>();
 
-                for (SObjectType sobType : sobTypes) {
+                for (SObjectType sobType : sobTypes.values()) {
                     typeInfo.put(sobType, new Type(this, sobType));
                 }
 
@@ -293,12 +292,12 @@ public with sharing class RelationshipModelGeneratorController {
                 Map<SObjectField, Relationship> fieldInfo = new Map<SObjectField, Relationship>();
 
                 // Child info
-                for (SObjectType sobType : sobTypes) {
+                for (SObjectType sobType : sobTypes.values()) {
                     Type t = typeInfo.get(sobType);
 
                     for (ChildRelationship c : sobType.getDescribe().getChildRelationships()) {
                         SObjectType ct = c.getChildSObject();
-                        if (sobTypes.contains(ct) && c.getRelationshipName() != null && !excludedFields.contains(c.getField())) {
+                        if (sobTypes.containsKey(String.valueOf(ct)) && c.getRelationshipName() != null && !excludedFields.contains(c.getField())) {
                             Relationship r = new Relationship(this, sobType, ct, c.getField(), c.getRelationshipName());
                             t.children.add(r);
                             fieldInfo.put(c.getField(), r);
@@ -307,7 +306,7 @@ public with sharing class RelationshipModelGeneratorController {
                 }
 
                 // Parent info
-                for (SObjectType sobType : sobTypes) {
+                for (SObjectType sobType : sobTypes.values()) {
                     Type t = typeInfo.get(sobType);
 
                     for(SObjectField f : sobType.getDescribe().fields.getMap().values()) {
@@ -315,7 +314,7 @@ public with sharing class RelationshipModelGeneratorController {
                             DescribeFieldResult dfr = f.getDescribe();
                             if (dfr.getType() == DisplayType.REFERENCE) {
                                 for (SObjectType pt : dfr.getReferenceTo()) {
-                                    if (sobTypes.contains(pt)) {
+                                    if (sobTypes.containsKey(String.valueOf(pt))) {
                                         // Instance shared
                                         Relationship r = fieldInfo.get(f);
                                         if (r != null) {
@@ -331,7 +330,7 @@ public with sharing class RelationshipModelGeneratorController {
                 }
 
                 // Possible that there are duplicate relationship names between the parent and child set so de-duplicate
-                for (SObjectType sobType : sobTypes) {
+                for (SObjectType sobType : sobTypes.values()) {
                     Type t = typeInfo.get(sobType);
 
                     Map<String, Relationship> parentNames = new Map<String, Relationship>();
@@ -617,13 +616,11 @@ public with sharing class RelationshipModelGeneratorController {
         indent++;
         blank();
         add('//');
-        add('// Factory interfaces and default factories');
+        add('// Factory interfaces and default implementations');
         add('//');
 
         for (SObjectType t : extensibleSobTypes) {
             Type info = typeInfo.get(t);
-            if (info == null) continue;
-
             add(classModifier + ' interface ' + info.className() + 'Factory {');
             indent++;
             add(info.className() + ' new' + info.className() + '();');
@@ -664,7 +661,7 @@ public with sharing class RelationshipModelGeneratorController {
         indent++;
 
         // Pereserves order from types input field
-        for (SObjectType t : sobTypes) {
+        for (SObjectType t : sobTypes.values()) {
             Type info = typeInfo.get(t);
             typeComment(info);
             recordTypes(info);
@@ -1132,10 +1129,10 @@ public with sharing class RelationshipModelGeneratorController {
         indent++;
 
         blank();
-        add(methodModifier + ' String parent;');
-        add(methodModifier + ' String rawParent;');
-        add(methodModifier + ' String child;');
-        add(methodModifier + ' String rawChild;');
+        add(methodModifier + ' final String parent;');
+        add(methodModifier + ' final String rawParent;');
+        add(methodModifier + ' final String child;');
+        add(methodModifier + ' final String rawChild;');
         blank();
 
         add('Relationship(String parent, String rawParent, String child, String rawChild) {');
@@ -1198,7 +1195,7 @@ public with sharing class RelationshipModelGeneratorController {
         indent++;
 
         // Pereserves order from types input field
-        for (SObjectType t : sobTypes) {
+        for (SObjectType t : sobTypes.values()) {
             test(typeInfo.get(t));
         }
 
